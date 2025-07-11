@@ -85,9 +85,16 @@ export interface GenericOAuthConfig {
 	 * Custom function to fetch user info.
 	 * If provided, this function will be used instead of the default user info fetching logic.
 	 * @param tokens - The OAuth tokens received after successful authentication
+	 * @param context - Additional context including code, provider config, etc.
 	 * @returns A promise that resolves to a User object or null
 	 */
-	getUserInfo?: (tokens: OAuth2Tokens) => Promise<User | null>;
+	getUserInfo?: (
+		tokens: OAuth2Tokens,
+		context?: {
+			code?: string;
+			provider?: GenericOAuthConfig;
+		}
+	) => Promise<User | null>;
 	/**
 	 * Custom function to map the user profile to a User object.
 	 */
@@ -145,6 +152,13 @@ export interface GenericOAuthConfig {
 	 * @default false
 	 */
 	overrideUserInfo?: boolean;
+	/**
+	 * Allow missing email from OAuth provider.
+	 * Some providers like WeChat don't provide email.
+	 * When true, users can sign in without email.
+	 * @default false
+	 */
+	allowMissingEmail?: boolean;
 }
 
 interface GenericOAuthOptions {
@@ -300,7 +314,7 @@ export const genericOAuth = (options: GenericOAuthOptions) => {
 
 					async getUserInfo(tokens) {
 						const userInfo = c.getUserInfo
-							? await c.getUserInfo(tokens)
+							? await c.getUserInfo(tokens, { provider: c })
 							: await getUserInfo(tokens, finalUserInfoUrl);
 						if (!userInfo) {
 							return null;
@@ -622,7 +636,10 @@ export const genericOAuth = (options: GenericOAuthOptions) => {
 					}
 					const userInfo = (
 						provider.getUserInfo
-							? await provider.getUserInfo(tokens)
+							? await provider.getUserInfo(tokens, {
+								code,
+								provider,
+							})
 							: await getUserInfo(tokens, finalUserInfoUrl)
 					) as User | null;
 					if (!userInfo) {
@@ -631,7 +648,7 @@ export const genericOAuth = (options: GenericOAuthOptions) => {
 					const mapUser = provider.mapProfileToUser
 						? await provider.mapProfileToUser(userInfo)
 						: userInfo;
-					if (!mapUser?.email) {
+					if (!mapUser?.email && !provider.allowMissingEmail) {
 						ctx.context.logger.error("Unable to get user info", userInfo);
 						throw redirectOnError("email_is_missing");
 					}
@@ -639,6 +656,7 @@ export const genericOAuth = (options: GenericOAuthOptions) => {
 						if (
 							ctx.context.options.account?.accountLinking
 								?.allowDifferentEmails !== true &&
+							mapUser.email &&
 							link.email !== mapUser.email.toLowerCase()
 						) {
 							return redirectOnError("email_doesn't_match");
