@@ -1,5 +1,5 @@
 {
-  "name": "better-auth",
+  "name": "@yongx/better-auth",
   "version": "1.2.13",
   "description": "The most comprehensive authentication library for TypeScript.",
   "type": "module",
